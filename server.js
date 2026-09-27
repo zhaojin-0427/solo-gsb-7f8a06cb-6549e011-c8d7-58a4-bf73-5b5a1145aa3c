@@ -4,6 +4,7 @@ const path = require('path');
 const express = require('express');
 const { audit, compareFindings, FINDING_TYPES } = require('./lib/audit');
 const { preview } = require('./lib/preview');
+const { pseudolocalize } = require('./lib/pseudoloc');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -74,6 +75,32 @@ app.post('/api/audit', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+/**
+ * 伪本地化：读取基准 JSON，逐键生成字面文本膨胀的伪译文（结构与原消息一致）。
+ * 单键语法错误只跳过该键并在 skipped 中给出键名与原因，其余键照常生成。
+ */
+app.post('/api/pseudolocalize', (req, res) => {
+  const { baseline } = req.body || {};
+
+  if (typeof baseline !== 'string' || !baseline.trim()) {
+    return res.status(400).json({ error: '请粘贴基准消息 JSON' });
+  }
+
+  let baselineMessages;
+  try {
+    baselineMessages = parseJsonObject(baseline, '基准消息');
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const { messages, skipped } = pseudolocalize(baselineMessages);
+  res.json({
+    messages: JSON.stringify(messages, null, 2),
+    count: Object.keys(messages).length,
+    skipped,
+  });
+});
 
 /**
  * 消息实例预览：从基准选一个键，用一份参数值按各译文语言渲染。

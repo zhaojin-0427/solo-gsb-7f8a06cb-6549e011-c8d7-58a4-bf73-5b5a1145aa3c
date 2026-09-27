@@ -41,6 +41,25 @@
       <span id="status" role="status"></span>
     </div>
 
+    <section class="panel" id="pseudo-panel">
+      <div class="panel-head">
+        <h2>伪本地化</h2>
+        <span class="hint">读取「基准消息」JSON，生成字面文本膨胀至 ≥1.5 倍、结构不变的伪译文，用于检查文案膨胀后的界面</span>
+      </div>
+      <div class="actions">
+        <button id="run-pseudo" class="primary" type="button">生成伪译文</button>
+        <span id="pseudo-status" role="status"></span>
+      </div>
+      <div id="pseudo-results" class="hidden">
+        <div id="pseudo-skipped" class="pseudo-skipped hidden"></div>
+        <textarea id="pseudo-output" rows="8" readonly spellcheck="false"></textarea>
+        <div class="actions pseudo-actions">
+          <button id="copy-pseudo" type="button">复制 JSON</button>
+          <button id="fill-pseudo" type="button">填入译文编辑块</button>
+        </div>
+      </div>
+    </section>
+
     <section class="panel" id="preview-panel">
       <div class="panel-head">
         <h2>消息实例预览</h2>

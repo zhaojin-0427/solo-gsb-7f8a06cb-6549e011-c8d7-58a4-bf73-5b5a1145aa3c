@@ -23,6 +23,14 @@ const previewStatusEl = document.getElementById('preview-status');
 const previewResultsEl = document.getElementById('preview-results');
 const previewTbody = document.querySelector('#preview-table tbody');
 
+const runPseudoBtn = document.getElementById('run-pseudo');
+const pseudoStatusEl = document.getElementById('pseudo-status');
+const pseudoResultsEl = document.getElementById('pseudo-results');
+const pseudoSkippedEl = document.getElementById('pseudo-skipped');
+const pseudoOutputEl = document.getElementById('pseudo-output');
+const copyPseudoBtn = document.getElementById('copy-pseudo');
+const fillPseudoBtn = document.getElementById('fill-pseudo');
+
 let typeLabels = {}; // 由服务端返回，未知类型兜底为原始代码
 let allFindings = [];
 
@@ -327,6 +335,83 @@ runPreviewBtn.addEventListener('click', async () => {
   } finally {
     runPreviewBtn.disabled = false;
   }
+});
+
+/* ---------- 伪本地化 ---------- */
+
+function setPseudoStatus(text, isError = false) {
+  pseudoStatusEl.textContent = text;
+  pseudoStatusEl.classList.toggle('error', isError);
+}
+
+runPseudoBtn.addEventListener('click', async () => {
+  setPseudoStatus('生成中…');
+  runPseudoBtn.disabled = true;
+  try {
+    const resp = await fetch('/api/pseudolocalize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseline: baselineEl.value }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      setPseudoStatus(data.error || '生成失败', true);
+      return;
+    }
+
+    pseudoOutputEl.value = data.messages;
+    const skipped = data.skipped || [];
+    if (skipped.length) {
+      pseudoSkippedEl.innerHTML =
+        `<strong>已跳过 ${skipped.length} 个键（语法错误，未生成）：</strong>` +
+        `<ul>${skipped.map((s) => `<li><code>${escapeHtml(s.key)}</code>：${escapeHtml(s.error)}</li>`).join('')}</ul>`;
+      pseudoSkippedEl.classList.remove('hidden');
+    } else {
+      pseudoSkippedEl.classList.add('hidden');
+      pseudoSkippedEl.innerHTML = '';
+    }
+    pseudoResultsEl.classList.remove('hidden');
+    setPseudoStatus(
+      `完成：生成 ${data.count} 个键` +
+      (skipped.length ? `，跳过 ${skipped.length} 个` : '') +
+      '。可复制 JSON，或填入译文编辑块后继续审计 / 预览。',
+    );
+  } catch (err) {
+    setPseudoStatus(`请求失败：${err.message}`, true);
+  } finally {
+    runPseudoBtn.disabled = false;
+  }
+});
+
+copyPseudoBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(pseudoOutputEl.value);
+    setPseudoStatus('已复制到剪贴板。');
+  } catch {
+    // 剪贴板 API 不可用（如非安全上下文）时退化为选中文本，便于手动复制
+    pseudoOutputEl.focus();
+    pseudoOutputEl.select();
+    setPseudoStatus('无法访问剪贴板，已选中全部文本，请按 Ctrl+C 复制。', true);
+  }
+});
+
+fillPseudoBtn.addEventListener('click', () => {
+  const blocks = [...translationsEl.querySelectorAll('.translation-block')];
+  // 优先填入第一个空白译文块；没有空白块且未满 4 份时新增一个
+  let target = blocks.find((b) => !b.querySelector('textarea').value.trim());
+  if (!target && translationsCount() < MAX_TRANSLATIONS) {
+    addTranslation();
+    target = translationsEl.lastElementChild;
+  }
+  if (!target) {
+    setPseudoStatus('4 个译文编辑块都已使用，请先清空一个再填入。', true);
+    return;
+  }
+  target.querySelector('textarea').value = pseudoOutputEl.value;
+  const langInput = target.querySelector('.lang-input');
+  if (!langInput.value.trim()) langInput.value = 'en-XA';
+  setPseudoStatus('已填入译文编辑块，可直接「开始审计」或在下方「渲染预览」。');
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
 });
 
 /* ---------- 初始化 ---------- */

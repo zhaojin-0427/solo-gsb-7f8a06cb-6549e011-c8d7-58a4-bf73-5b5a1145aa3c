@@ -153,6 +153,20 @@ td.detail { color: #374151; }
 td.preview-text { white-space: pre-wrap; word-break: break-word; }
 td.preview-error { color: #b91c1c; word-break: break-word; }
 
+/* 伪本地化 */
+#pseudo-status { font-size: 14px; color: var(--muted); }
+#pseudo-status.error { color: #b91c1c; }
+#pseudo-panel > .actions { margin-bottom: 0; }
+#pseudo-results { margin-top: 14px; }
+#pseudo-output { background: #f8fafc; }
+.pseudo-actions { margin: 10px 0 0; }
+.pseudo-skipped {
+  border: 1px solid #fde68a; background: #fffbeb; color: #92400e;
+  border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: 0 0 10px;
+}
+.pseudo-skipped ul { margin: 6px 0 0; padding-left: 20px; }
+.pseudo-skipped code { font-family: Consolas, Menlo, monospace; }
+
 footer {
   text-align: center; color: var(--muted); font-size: 13px; padding: 18px 0 28px;
 }

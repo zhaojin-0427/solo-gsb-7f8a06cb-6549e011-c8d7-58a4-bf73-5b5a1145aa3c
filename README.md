@@ -1,8 +1,8 @@
 # ICU 多语言消息审计
 
-本地运行的多语言消息审计工具：粘贴一份基准和 1～4 份译文 JSON（均为**消息键 → ICU MessageFormat 字符串**的平铺对象），逐键比对并报告差异；还可以选一个消息键、输入一份参数值，按各译文语言**实际渲染**并并排预览。数据不出本机。
+本地运行的多语言消息审计工具：粘贴一份基准和 1～4 份译文 JSON（均为**消息键 → ICU MessageFormat 字符串**的平铺对象），逐键比对并报告差异；可以选一个消息键、输入一份参数值，按各译文语言**实际渲染**并并排预览；还可以从基准一键生成**伪本地化译文**，检查文案膨胀后的界面表现。数据不出本机。
 
-技术栈：Node.js + Express + [`@formatjs/icu-messageformat-parser`](https://formatjs.github.io/docs/icu-messageformat-parser/)（审计解析）+ [`intl-messageformat`](https://formatjs.github.io/docs/intl-messageformat/)（实例渲染），前端为原生 HTML/CSS/JS，无构建步骤。
+技术栈：Node.js + Express + [`@formatjs/icu-messageformat-parser`](https://formatjs.github.io/docs/icu-messageformat-parser/)（审计与伪本地化解析）+ [`intl-messageformat`](https://formatjs.github.io/docs/intl-messageformat/)（实例渲染），前端为原生 HTML/CSS/JS，无构建步骤。
 
 ## 快速开始
 
@@ -41,6 +41,7 @@ npm start
 3. 点击「开始审计」。也可以先点「填入示例」查看演示效果（示例数据同时存放在 `examples/` 目录）。
 4. 结果按**语言 → 消息键**排序，可用下拉框或点击统计徽章**按错误类型筛选**。
 5. 需要看某条消息的实际效果时，用下方的「消息实例预览」：选一个消息键、填一份参数值 JSON，点击「渲染预览」，即可按各译文语言并排查看渲染结果（见下一节）。
+6. 需要检查文案膨胀后的界面时，用「伪本地化」：点击「生成伪译文」从基准生成膨胀伪译文，可复制或填入译文编辑块（见「伪本地化」一节）。
 
 ## 审计规则
 
@@ -89,14 +90,32 @@ npm start
 - 实际走到的分支里**缺值或类型不符**时，该语言行报具体原因；某一语言**缺失消息、语言代码无效或模板错误**只影响该语言行，其余语言照常渲染。
 - 预览读取的是编辑区**最新内容**（无需先审计），结果显示在独立区域，**不会覆盖审计发现**。
 
+## 伪本地化
+
+「伪本地化」模块读取「基准消息」编辑区的 JSON，逐键生成**字面文本膨胀**的伪译文，用于在接入真实译文前检查文案变长后的界面排版（截断、换行、溢出等）。
+
+操作步骤：
+
+1. 启动服务后打开 **http://localhost:3000**，在「基准消息」编辑区粘贴基准 JSON。
+2. 点击「生成伪译文」：结果显示在模块内的只读编辑框中，可点击「复制 JSON」复制。
+3. 或点击「填入译文编辑块」：自动填入第一个空白译文块（没有空白块且未满 4 份时新增一个；语言代码为空时填 `en-XA`），之后可直接使用现有「开始审计」和「消息实例预览」。伪译文与基准结构完全一致，审计应无任何结构类发现，预览可按 `en-XA` 语言实际渲染膨胀后的文本。
+
+生成规则：
+
+- 逐键解析 ICU MessageFormat，只改写**字面文本**：每段非空白字面文本按 **Unicode 字素**（grapheme cluster，emoji 序列、组合字符均算一个字素）扩到**至少原长的 1.5 倍**——在段尾依原顺序**循环追加段内的非空白字素**，并在段首尾加 `⟦` `⟧`；**纯空白段原样保留**（如两个占位符之间的单个空格）。
+- 以下内容逐字节保留：参数名与格式（含 number skeleton、date/time 样式）、`select` / `plural` / `selectordinal` 的选项名与 `offset`、显式 `=n`、复数 `#`、标签（`<b>...</b>`）及撇号引用语义（如 `'{x}'` 生成后仍是字面文本，不会变成参数；复数选项内被引用的 `'#'` 仍是字面文本）。
+- 生成消息**可再次解析**，且去掉字面文本后与原消息**结构一致**（可直接通过本工具的审计验证）。
+- 单键语法错误（含非字符串消息值）只在结果上方**列出键名与原因并跳过该键**，其余键照常生成。
+
 ## 项目结构
 
 ```
-├── server.js            # Express 服务：静态页面 + POST /api/audit + POST /api/preview
+├── server.js            # Express 服务：静态页面 + POST /api/audit + POST /api/preview + POST /api/pseudolocalize
 ├── lib/audit.js         # 审计核心：ICU 解析、签名提取与比对
 ├── lib/preview.js       # 预览核心：按语言渲染消息实例（分支模拟、值校验、intl-messageformat）
+├── lib/pseudoloc.js     # 伪本地化核心：字面文本按字素膨胀、ICU 转义与结构保留
 ├── public/              # 原生前端（index.html / app.js / style.css）
-├── test/                # 单元测试（node:test）：audit.test.js / preview.test.js
+├── test/                # 单元测试（node:test）：audit.test.js / preview.test.js / pseudoloc.test.js
 ├── examples/            # 示例基准与译文
 ├── Dockerfile
 └── docker-compose.yml
@@ -137,3 +156,23 @@ npm test
 ```
 
 响应：`{ results: [{ language, text } | { language, error }] }`，顺序与译文块一致；`key` 必须存在于基准中，`values` 省略时按空对象处理。
+
+`POST /api/pseudolocalize`
+
+```json
+{
+  "baseline": "{\"a\":\"你好 {name}\",\"b\":\"{n, plural, other{# 条}}\"}"
+}
+```
+
+响应：
+
+```json
+{
+  "messages": "{\n  \"a\": \"⟦你好 你好⟧{name}\",\n  \"b\": \"{n, plural, other{#⟦ 条条⟧}}\"\n}",
+  "count": 2,
+  "skipped": []
+}
+```
+
+`messages` 为可直接粘贴/复制的伪译文 JSON 字符串（已格式化）；`skipped` 列出因语法错误被跳过的键及原因（`[{ key, error }]`），其余键照常生成。
