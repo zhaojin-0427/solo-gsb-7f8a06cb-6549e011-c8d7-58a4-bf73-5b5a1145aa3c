@@ -23,6 +23,14 @@ const previewStatusEl = document.getElementById('preview-status');
 const previewResultsEl = document.getElementById('preview-results');
 const previewTbody = document.querySelector('#preview-table tbody');
 
+const runPseudoBtn = document.getElementById('run-pseudo');
+const copyPseudoBtn = document.getElementById('copy-pseudo');
+const fillPseudoBtn = document.getElementById('fill-pseudo');
+const pseudoStatusEl = document.getElementById('pseudo-status');
+const pseudoOutputEl = document.getElementById('pseudo-output');
+
+const PSEUDO_LANG = 'en-XA';
+
 let typeLabels = {}; // 由服务端返回，未知类型兜底为原始代码
 let allFindings = [];
 
@@ -205,10 +213,7 @@ function applyFilter() {
 filterEl.addEventListener('change', applyFilter);
 
 runBtn.addEventListener('click', async () => {
-  const translations = [...translationsEl.querySelectorAll('.translation-block')].map((block) => ({
-    lang: block.querySelector('.lang-input').value,
-    messages: block.querySelector('textarea').value,
-  }));
+  const translations = currentTranslations();
 
   setStatus('审计中…');
   runBtn.disabled = true;
@@ -239,6 +244,101 @@ runBtn.addEventListener('click', async () => {
   } finally {
     runBtn.disabled = false;
   }
+});
+
+/* ---------- 伪本地化 ---------- */
+
+function setPseudoStatus(text, isError = false) {
+  pseudoStatusEl.textContent = text;
+  pseudoStatusEl.classList.toggle('error', isError);
+}
+
+/** 收集当前所有译文块 */
+function currentTranslations() {
+  return [...translationsEl.querySelectorAll('.translation-block')].map((block) => ({
+    lang: block.querySelector('.lang-input').value,
+    messages: block.querySelector('textarea').value,
+  }));
+}
+
+runPseudoBtn.addEventListener('click', async () => {
+  setPseudoStatus('生成中…');
+  runPseudoBtn.disabled = true;
+  try {
+    const resp = await fetch('/api/pseudolocalize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseline: baselineEl.value }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      pseudoOutputEl.value = '';
+      copyPseudoBtn.disabled = true;
+      fillPseudoBtn.disabled = true;
+      setPseudoStatus(data.error || '生成失败', true);
+      return;
+    }
+
+    const skipped = data.skipped || [];
+    pseudoOutputEl.value = JSON.stringify(data.messages || {}, null, 2);
+    copyPseudoBtn.disabled = false;
+    fillPseudoBtn.disabled = false;
+    const parts = [`已生成 ${data.count} 个键的伪译文。`];
+    if (skipped.length) {
+      parts.push(`跳过 ${skipped.length} 个语法错误 / 非字符串键：${skipped.map((s) => s.key).join('、')}`);
+    }
+    setPseudoStatus(parts.join(' '), skipped.length > 0);
+  } catch (err) {
+    setPseudoStatus(`请求失败：${err.message}`, true);
+  } finally {
+    runPseudoBtn.disabled = false;
+  }
+});
+
+copyPseudoBtn.addEventListener('click', async () => {
+  if (!pseudoOutputEl.value) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(pseudoOutputEl.value);
+    } else {
+      pseudoOutputEl.focus();
+      pseudoOutputEl.select();
+      document.execCommand('copy');
+    }
+    setPseudoStatus('伪译文 JSON 已复制到剪贴板。');
+  } catch {
+    pseudoOutputEl.focus();
+    pseudoOutputEl.select();
+    setPseudoStatus('浏览器拒绝了剪贴板访问，请手动全选复制。', true);
+  }
+});
+
+/** 填入译文块：优先覆盖语言代码为 en-XA 的块，否则用第一个空块；都没有则新建 */
+fillPseudoBtn.addEventListener('click', () => {
+  if (!pseudoOutputEl.value) return;
+  const blocks = [...translationsEl.querySelectorAll('.translation-block')];
+  const pseudoBlock = blocks.find(
+    (b) => b.querySelector('.lang-input').value.trim() === PSEUDO_LANG,
+  );
+  const emptyBlock = !pseudoBlock
+    ? blocks.find((b) => !b.querySelector('textarea').value.trim())
+    : null;
+
+  if (pseudoBlock || emptyBlock) {
+    const block = pseudoBlock || emptyBlock;
+    block.querySelector('.lang-input').value = PSEUDO_LANG;
+    block.querySelector('textarea').value = pseudoOutputEl.value;
+    refreshButtons();
+    setPseudoStatus(`已填入${pseudoBlock ? '原有的' : '一个'}「${PSEUDO_LANG}」译文块，可直接开始审计或渲染预览。`);
+    return;
+  }
+
+  if (translationsCount() >= MAX_TRANSLATIONS) {
+    setPseudoStatus(`译文块已达 ${MAX_TRANSLATIONS} 份上限，请先空出一个块再填入。`, true);
+    return;
+  }
+  addTranslation(PSEUDO_LANG, pseudoOutputEl.value);
+  setPseudoStatus(`已新建「${PSEUDO_LANG}」译文块并填入伪译文，可直接开始审计或渲染预览。`);
 });
 
 /* ---------- 消息实例预览 ---------- */
@@ -288,10 +388,7 @@ runPreviewBtn.addEventListener('click', async () => {
     return;
   }
   // 读取编辑区最新内容
-  const translations = [...translationsEl.querySelectorAll('.translation-block')].map((block) => ({
-    lang: block.querySelector('.lang-input').value,
-    messages: block.querySelector('textarea').value,
-  }));
+  const translations = currentTranslations();
 
   setPreviewStatus('渲染中…');
   runPreviewBtn.disabled = true;

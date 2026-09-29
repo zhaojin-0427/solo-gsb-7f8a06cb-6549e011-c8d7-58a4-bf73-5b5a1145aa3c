@@ -36,6 +36,25 @@
       <div id="translations"></div>
     </section>
 
+    <section class="panel" id="pseudo-panel">
+      <div class="panel-head">
+        <h2>伪本地化（Pseudolocalization）</h2>
+        <span class="hint">读取上方基准 JSON，生成膨胀约 1.5 倍的伪译文，用于检查文案膨胀后的界面</span>
+      </div>
+      <p class="hint pseudo-hint">
+        逐键解析 ICU MessageFormat：仅膨胀字面文本（段首尾加 ⟦⟧），参数名与格式、select / plural /
+        selectordinal 的选项名与 offset、显式 =n、复数 #、标签及撇号引用均原样保留。单键语法错误会跳过并提示键名。
+      </p>
+      <div class="actions pseudo-actions">
+        <button id="run-pseudo" class="primary" type="button">生成伪译文</button>
+        <button id="copy-pseudo" type="button" disabled>复制 JSON</button>
+        <button id="fill-pseudo" type="button" disabled>填入译文块（en-XA）</button>
+        <span id="pseudo-status" role="status"></span>
+      </div>
+      <textarea id="pseudo-output" rows="8" spellcheck="false" readonly
+        placeholder="点击「生成伪译文」后，伪译文 JSON 会显示在这里，可直接复制或填入译文块继续审计 / 预览。"></textarea>
+    </section>
+
     <div class="actions">
       <button id="run" class="primary" type="button">开始审计</button>
       <span id="status" role="status"></span>

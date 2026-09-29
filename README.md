@@ -1,6 +1,6 @@
 # ICU 多语言消息审计
 
-本地运行的多语言消息审计工具：粘贴一份基准和 1～4 份译文 JSON（均为**消息键 → ICU MessageFormat 字符串**的平铺对象），逐键比对并报告差异；还可以选一个消息键、输入一份参数值，按各译文语言**实际渲染**并并排预览。数据不出本机。
+本地运行的多语言消息审计工具：粘贴一份基准和 1～4 份译文 JSON（均为**消息键 → ICU MessageFormat 字符串**的平铺对象），逐键比对并报告差异；还可以选一个消息键、输入一份参数值，按各译文语言**实际渲染**并并排预览。页面上另有「伪本地化」模块：读取当前基准 JSON，生成文案膨胀约 1.5 倍的可复制伪译文 JSON，用于检查文案膨胀后的界面。数据不出本机。
 
 技术栈：Node.js + Express + [`@formatjs/icu-messageformat-parser`](https://formatjs.github.io/docs/icu-messageformat-parser/)（审计解析）+ [`intl-messageformat`](https://formatjs.github.io/docs/intl-messageformat/)（实例渲染），前端为原生 HTML/CSS/JS，无构建步骤。
 
@@ -41,6 +41,18 @@ npm start
 3. 点击「开始审计」。也可以先点「填入示例」查看演示效果（示例数据同时存放在 `examples/` 目录）。
 4. 结果按**语言 → 消息键**排序，可用下拉框或点击统计徽章**按错误类型筛选**。
 5. 需要看某条消息的实际效果时，用下方的「消息实例预览」：选一个消息键、填一份参数值 JSON，点击「渲染预览」，即可按各译文语言并排查看渲染结果（见下一节）。
+6. 想检查文案膨胀后的界面时，用「伪本地化」面板（见下文），一键生成伪译文 JSON，可直接复制或填入一个译文块，继续走审计与预览流程。
+
+## 伪本地化
+
+审计页「译文」与「开始审计」之间的 **伪本地化（Pseudolocalization）** 面板读取**当前基准编辑区**的 JSON，逐键解析 ICU MessageFormat 并生成可复制的伪译文 JSON：
+
+- 每段**非空白字面文本**按 Unicode 字素（grapheme cluster，含组合字符、emoji ZWJ 序列）扩到**至少原长的 1.5 倍**：依原顺序循环追加本段的非空白字素，并在段首尾加 `⟦⟧`（如 `消息审计台` → `⟦消息审计台消息审⟧`）；**纯空白段原样保留**。
+- 只改字面文本，**参数名与格式（number / date / time 的 style、skeleton）、`select` / `plural` / `selectordinal` 的选项名与 `offset`、显式 `=n`、复数 `#`、富文本标签、撇号（`'`）引用语义全部保留**；字面量里可能被误读为特殊符号的字符（`{` `}` `<` `>` 及复数分支内的 `#`）会用撇号引用，撇号本身翻倍。
+- 生成的消息**保证能再次解析**，且去掉字面文本后与原消息结构完全一致。
+- **单键语法错误（或非字符串值）只跳过该键**，结果状态行列出被跳过的键名与原因，其余键照常生成。
+
+操作：点击「生成伪译文」→「复制 JSON」，或点「填入译文块（en-XA）」自动放入一个语言代码为 `en-XA` 的译文块（优先复用已有 `en-XA` 块，其次第一个空块，否则新建；达到 4 份上限时需先空出一块）。填入后可直接「开始审计」（伪译文与基准结构一致，不应出现结构类差异），或在「消息实例预览」中选键渲染，直观看到文案膨胀后的排版效果。
 
 ## 审计规则
 
@@ -92,11 +104,12 @@ npm start
 ## 项目结构
 
 ```
-├── server.js            # Express 服务：静态页面 + POST /api/audit + POST /api/preview
+├── server.js            # Express 服务：静态页面 + POST /api/audit + /api/preview + /api/pseudolocalize
 ├── lib/audit.js         # 审计核心：ICU 解析、签名提取与比对
 ├── lib/preview.js       # 预览核心：按语言渲染消息实例（分支模拟、值校验、intl-messageformat）
+├── lib/pseudoloc.js     # 伪本地化核心：逐键解析 ICU，按字素膨胀字面文本并保留全部结构
 ├── public/              # 原生前端（index.html / app.js / style.css）
-├── test/                # 单元测试（node:test）：audit.test.js / preview.test.js
+├── test/                # 单元测试（node:test）：audit / preview / pseudoloc
 ├── examples/            # 示例基准与译文
 ├── Dockerfile
 └── docker-compose.yml
@@ -137,3 +150,13 @@ npm test
 ```
 
 响应：`{ results: [{ language, text } | { language, error }] }`，顺序与译文块一致；`key` 必须存在于基准中，`values` 省略时按空对象处理。
+
+`POST /api/pseudolocalize`
+
+```json
+{
+  "baseline": "{\"a\":\"你好 {name}\",\"bad\":\"未闭合 {x\"}"
+}
+```
+
+响应：`{ messages: { <key>: <伪译文 ICU 字符串> }, skipped: [{ key, error }], count }`。`messages` 为可复制的平铺 JSON（跳过语法错误 / 非字符串的键），生成的每条消息均可再次解析且结构与原消息一致。

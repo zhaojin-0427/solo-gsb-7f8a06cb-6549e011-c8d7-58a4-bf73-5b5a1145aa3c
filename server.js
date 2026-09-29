@@ -4,6 +4,7 @@ const path = require('path');
 const express = require('express');
 const { audit, compareFindings, FINDING_TYPES } = require('./lib/audit');
 const { preview } = require('./lib/preview');
+const { pseudoLocalize } = require('./lib/pseudoloc');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -71,6 +72,28 @@ app.post('/api/audit', (req, res) => {
   for (const f of findings) summary[f.type] = (summary[f.type] || 0) + 1;
 
   res.json({ findings, summary, types: FINDING_TYPES });
+});
+
+/**
+ * 伪本地化：读取当前基准 JSON，逐键解析 ICU MessageFormat 并生成可复制的伪译文 JSON。
+ * 单键语法错误（含非字符串值）只记录到 skipped，其余键照常生成。
+ */
+app.post('/api/pseudolocalize', (req, res) => {
+  const { baseline } = req.body || {};
+
+  if (typeof baseline !== 'string' || !baseline.trim()) {
+    return res.status(400).json({ error: '请粘贴基准消息 JSON' });
+  }
+
+  let baselineMessages;
+  try {
+    baselineMessages = parseJsonObject(baseline, '基准消息');
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const { output, skipped } = pseudoLocalize(baselineMessages);
+  res.json({ messages: output, skipped, count: Object.keys(output).length });
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));

@@ -153,6 +153,13 @@ td.detail { color: #374151; }
 td.preview-text { white-space: pre-wrap; word-break: break-word; }
 td.preview-error { color: #b91c1c; word-break: break-word; }
 
+/* 伪本地化 */
+.pseudo-hint { margin: 0 0 10px; }
+.pseudo-actions { margin-bottom: 10px; }
+#pseudo-status { font-size: 14px; color: var(--muted); }
+#pseudo-status.error { color: #b91c1c; }
+#pseudo-output { background: #f8fafc; }
+
 footer {
   text-align: center; color: var(--muted); font-size: 13px; padding: 18px 0 28px;
 }
